@@ -38,13 +38,13 @@ case class SpillableAggregate(
     resultAttribute: AttributeReference)
 
   /** Physical aggregator generated from a logical expression.  */
-  private[this] val aggregator: ComputedAggregate = null //IMPLEMENT ME
+  private[this] val aggregator: ComputedAggregate = ComputedAggregate(null, null, null)
 
   /** Schema of the aggregate.  */
   private[this] val aggregatorSchema: AttributeReference = null //IMPLEMENT ME
 
   /** Creates a new aggregator instance.  */
-  private[this] def newAggregatorInstance(): AggregateFunction = null //IMPLEMENT ME
+  private[this] def newAggregatorInstance(): AggregateFunction = aggregator.aggregate.newInstance() //IMPLEMENT ME
 
   /** Named attributes used to substitute grouping attributes in the final result. */
   private[this] val namedGroups = groupingExpressions.map {
@@ -97,13 +97,11 @@ case class SpillableAggregate(
       var aggregateResult: Iterator[Row] = aggregate()
 
       def hasNext() = {
-        // IMPLEMENT ME
-        false
+        aggregateResult.hasNext()
       }
 
       def next() = {
-        // IMPLEMENT ME
-        null
+        aggregateResult.next()
       }
 
       /**
@@ -112,8 +110,19 @@ case class SpillableAggregate(
        * @return
        */
       private def aggregate(): Iterator[Row] = {
-        // IMPLEMENT ME
-        null
+        while(data.hasNext()) {
+          AggregateExpression exp = data.next();
+          aggregate = 
+          ComputedAggregate(
+            exp, 
+            BindReferences.bindReference(exp, childOutput),
+            AttributeReference(s"aggResult:$a", exp.dataType, exp.nullable)())
+
+          aggregatorSchema = aggregator.resultAttribute;
+          currentAggregationTable.update(exp, newAggregatorInstance())
+        }
+
+        currentAggregationTable.generateIterator().AggregateIteratorGenerator(resultExpression, aggregatorSchema)
       }
 
       /**
