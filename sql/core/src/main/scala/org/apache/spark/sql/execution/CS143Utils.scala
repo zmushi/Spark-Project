@@ -235,13 +235,11 @@ object AggregateIteratorGenerator {
         val postAggregateProjection = CS143Utils.getNewProjection(resultExpressions, inputSchema)
 
         def hasNext() = {
-          // IMPLEMENT ME
-          false
+          input.hasNext()
         }
 
         def next() = {
-          // IMPLEMENT ME
-          null
+          Row(input.next(), postAggregateProjection)
         }
       }
     }
