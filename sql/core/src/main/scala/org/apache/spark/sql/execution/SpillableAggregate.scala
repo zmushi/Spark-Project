@@ -38,13 +38,24 @@ case class SpillableAggregate(
     resultAttribute: AttributeReference)
 
   /** Physical aggregator generated from a logical expression.  */
-  private[this] val aggregator: ComputedAggregate = ComputedAggregate(null, null, null)
+  private[this] val aggregators: Array[ComputedAggregate] = aggregateExpressions.flatMap { agg =>
+    agg.collect {
+      case a: AggregateExpression =>
+        ComputedAggregate(
+          a,
+          BindReferences.bindReference(a, child.output),
+          AttributeReference(s"aggResult:$a", a.dataType, a.nullable)())
+    }
+  }.toArray
+
+  /** Physical aggregator generated from a logical expression.  */
+  private[this] val aggregator: ComputedAggregate = aggregators(0) //aggregators(aggregators.length-1)
 
   /** Schema of the aggregate.  */
-  private[this] val aggregatorSchema: AttributeReference = null //IMPLEMENT ME
+  private[this] val aggregatorSchema: AttributeReference = aggregator.resultAttribute
 
   /** Creates a new aggregator instance.  */
-  private[this] def newAggregatorInstance(): AggregateFunction = aggregator.aggregate.newInstance() //IMPLEMENT ME
+  private[this] def newAggregatorInstance(): AggregateFunction = aggregator.aggregate.newInstance()
 
   /** Named attributes used to substitute grouping attributes in the final result. */
   private[this] val namedGroups = groupingExpressions.map {
@@ -97,10 +108,14 @@ case class SpillableAggregate(
       var aggregateResult: Iterator[Row] = aggregate()
 
       def hasNext() = {
-        aggregateResult.hasNext()
+        aggregateResult.hasNext
       }
 
       def next() = {
+        if (!hasNext) {
+            throw new java.util.NoSuchElementException
+        }
+
         aggregateResult.next()
       }
 
@@ -110,19 +125,21 @@ case class SpillableAggregate(
        * @return
        */
       private def aggregate(): Iterator[Row] = {
-        while(data.hasNext()) {
-          AggregateExpression exp = data.next();
-          aggregate = 
-          ComputedAggregate(
-            exp, 
-            BindReferences.bindReference(exp, childOutput),
-            AttributeReference(s"aggResult:$a", exp.dataType, exp.nullable)())
+        while(data.hasNext) {
+          val currRow = groupingProjection(data.next())
+          var currFunc = currentAggregationTable(currRow)
 
-          aggregatorSchema = aggregator.resultAttribute;
-          currentAggregationTable.update(exp, newAggregatorInstance())
+          if (currFunc == null) {
+            currFunc = newAggregatorInstance()
+            currentAggregationTable.update(currRow.copy(), currFunc)
+          }
+
+          currFunc.update(currRow) 
         }
 
-        currentAggregationTable.generateIterator().AggregateIteratorGenerator(resultExpression, aggregatorSchema)
+        AggregateIteratorGenerator(
+          resultExpression,
+          Seq(aggregatorSchema) ++ namedGroups.map(_._2))(currentAggregationTable.iterator)
       }
 
       /**
