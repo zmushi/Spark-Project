@@ -136,10 +136,15 @@ case class SpillableAggregate(
 
           if (currFunc == null) {
             currFunc = newAggregatorInstance()
-            currentAggregationTable.update(currRow.copy(), currFunc)
+
+            if (CS143Utils.maybeSpill(currentAggregationTable, memorySize) {
+              spillRecord(currRow)
+            } else {
+              currentAggregationTable.update(currRow.copy(), currFunc)
+            }
           }
 
-          currFunc.update(currRow) 
+          currFunc.update(currRow)
         }
 
         AggregateIteratorGenerator(
@@ -153,7 +158,7 @@ case class SpillableAggregate(
        * @return
        */
       private def spillRecord(row: Row)  = {
-        // IMPLEMENT ME
+        spills(row.hashCode() % numPartitions).insert(row)
       }
 
       /**
