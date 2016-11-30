@@ -97,9 +97,14 @@ case class SpillableAggregate(
     var currentAggregationTable = new SizeTrackingAppendOnlyMap[Row, AggregateFunction]
     var data = input
 
-    def initSpills(): DiskHashedRelation  = {
-      // IMPLEMENT ME
-      null
+    def initSpills(): Array[DiskPartition]  = {
+      var partitions : Array[DiskPartition] = new Array[DiskPartition](numPartitions)
+
+      for (i <- 0 to numPartitions-1) {
+        partitions(i) = new DiskPartition(i.toString, 0)
+      }
+
+      partitions
     }
 
     val spills = initSpills()
