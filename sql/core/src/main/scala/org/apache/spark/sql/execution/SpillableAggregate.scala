@@ -101,10 +101,6 @@ case class SpillableAggregate(
     def initSpills(): Array[DiskPartition]  = {
       var partitions : Array[DiskPartition] = new Array[DiskPartition](numPartitions)
 
-      for (i <- 0 to numPartitions-1) {
-        partitions(i) = new DiskPartition(i.toString, 0)
-      }
-
       partitions
     }
 
@@ -116,6 +112,7 @@ case class SpillableAggregate(
       def hasNext() = {
         if (!aggregateResult.hasNext) {
            if (fetchSpill) {
+            currentAggregationTable = new SizeTrackingAppendOnlyMap[Row, AggregateFunction]
             aggregateResult = aggregate()
             true
            } else {
@@ -145,7 +142,6 @@ case class SpillableAggregate(
           var currFunc = currentAggregationTable(groupingProjection(currRow))
 
           if (currFunc == null) {
-
             currFunc = newAggregatorInstance()
 
             if (CS143Utils.maybeSpill(currentAggregationTable, memorySize)) {
@@ -171,7 +167,12 @@ case class SpillableAggregate(
        * @return
        */
       private def spillRecord(row: Row)  = {
-        spills(row.hashCode() % numPartitions).insert(row)
+        var indx = row.hashCode() % numPartitions
+        if (spills(indx) == null) {
+          spills(indx) = new DiskPartition(indx.toString, 0)
+        }
+
+        spills(indx).insert(row)
       }
 
       /**
@@ -189,12 +190,15 @@ case class SpillableAggregate(
        * @return
        */
       private def fetchSpill(): Boolean  = {
-        while (!spills(spillIndex).getData().hasNext && (spillIndex < numPartitions-1)) {
+
+        while ((spillIndex < numPartitions) && spills(spillIndex) == null) {
           spillIndex += 1
         }
 
-        if (spillIndex < numPartitions-1) {
+        if (spillIndex < numPartitions && spills(spillIndex) != null) {
+          spills(spillIndex).closeInput()
           data = spills(spillIndex).getData()
+          spillIndex += 1
           // Do the aggregation 
           //aggregateResult = aggregate()
           true
