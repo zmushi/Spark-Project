@@ -8,7 +8,7 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import scala.collection.mutable.ArraySeq
 
-case class Student(sid: Int, gpa: Int)
+//case class Student(sid: Int, gpa: Int)
 
 class InMemoryAggregateSuite extends FunSuite with BeforeAndAfter {
   val list: ArraySeq[Row] = new ArraySeq[Row](10)
