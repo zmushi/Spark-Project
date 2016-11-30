@@ -96,6 +96,7 @@ case class SpillableAggregate(
     val groupingProjection = CS143Utils.getNewProjection(groupingExpressions, child.output)
     var currentAggregationTable = new SizeTrackingAppendOnlyMap[Row, AggregateFunction]
     var data = input
+    var spillIndex = 0;
 
     def initSpills(): Array[DiskPartition]  = {
       var partitions : Array[DiskPartition] = new Array[DiskPartition](numPartitions)
@@ -113,7 +114,16 @@ case class SpillableAggregate(
       var aggregateResult: Iterator[Row] = aggregate()
 
       def hasNext() = {
-        aggregateResult.hasNext
+        if (!aggregateResult.hasNext) {
+           if (fetchSpill) {
+            aggregateResult = aggregate()
+            true
+           } else {
+            false
+           }
+        } else {
+          true
+        }
       }
 
       def next() = {
@@ -131,20 +141,23 @@ case class SpillableAggregate(
        */
       private def aggregate(): Iterator[Row] = {
         while(data.hasNext) {
-          val currRow = groupingProjection(data.next())
-          var currFunc = currentAggregationTable(currRow)
+          val currRow = data.next()
+          var currFunc = currentAggregationTable(groupingProjection(currRow))
 
           if (currFunc == null) {
+
             currFunc = newAggregatorInstance()
 
-            if (CS143Utils.maybeSpill(currentAggregationTable, memorySize) {
+            if (CS143Utils.maybeSpill(currentAggregationTable, memorySize)) {
               spillRecord(currRow)
             } else {
-              currentAggregationTable.update(currRow.copy(), currFunc)
-            }
-          }
+              currFunc.update(currRow)
+              currentAggregationTable.update(groupingProjection(currRow), currFunc)
 
-          currFunc.update(currRow)
+            }
+          } else {
+            currFunc.update(groupingProjection(currRow))
+          }
         }
 
         AggregateIteratorGenerator(
@@ -176,8 +189,18 @@ case class SpillableAggregate(
        * @return
        */
       private def fetchSpill(): Boolean  = {
-        // IMPLEMENT ME
-        false
+        while (!spills(spillIndex).getData().hasNext && (spillIndex < numPartitions-1)) {
+          spillIndex += 1
+        }
+
+        if (spillIndex < numPartitions-1) {
+          data = spills(spillIndex).getData()
+          // Do the aggregation 
+          //aggregateResult = aggregate()
+          true
+        } else {
+          false
+        }
       }
     }
   }
