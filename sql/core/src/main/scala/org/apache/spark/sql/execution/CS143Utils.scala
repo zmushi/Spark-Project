@@ -165,7 +165,7 @@ object CS143Utils {
    * @param allowedMemory the maximum amount of memory allowed for the input collection
    * @return true if the addition of a new record will make the table grow beyond the allowed size
    */
-  private def maybeSpill[K, V](collection: SizeTrackingAppendOnlyMap[K, V], allowedMemory: Long): Boolean = {
+  def maybeSpill[K, V](collection: SizeTrackingAppendOnlyMap[K, V], allowedMemory: Long): Boolean = {
     // IMPLEMENT ME
     false
   }
@@ -235,11 +235,20 @@ object AggregateIteratorGenerator {
         val postAggregateProjection = CS143Utils.getNewProjection(resultExpressions, inputSchema)
 
         def hasNext() = {
-          input.hasNext()
+          input.hasNext
         }
 
         def next() = {
-          Row(input.next(), postAggregateProjection)
+            if (!hasNext) {
+                throw new java.util.NoSuchElementException
+            }
+
+            val currRowTuple = input.next()
+            val currRow = currRowTuple._1
+            val aggregateFunc = currRowTuple._2
+            val aggregateResult = Row(aggregateFunc.eval(EmptyRow))
+
+            postAggregateProjection(new JoinedRow(aggregateResult, currRow))
         }
       }
     }
