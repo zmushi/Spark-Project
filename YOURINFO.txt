@@ -1,3 +1,9 @@
-Name: 
-UID:
-Email:
+Name: Colin Terndrup
+UID:  704617788
+Email: cterndrup@cs.ucla.edu
+
+Name: Mushi Zhou
+UID: 504778225
+Email: zmushi@ucla.edu
+
+

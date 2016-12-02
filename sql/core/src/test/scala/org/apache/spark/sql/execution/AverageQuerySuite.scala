@@ -30,7 +30,7 @@ class AverageQuerySuite extends QueryTest with BeforeAndAfterAll {
   // TESTS FOR TASK #5
   test("average") {
     checkAnswer(
-      sql("SELECT AVG(a) FROM decimalData"),
+      sql("SELECT AVG(a) FROM testData2"),
       2.0)
   }
 

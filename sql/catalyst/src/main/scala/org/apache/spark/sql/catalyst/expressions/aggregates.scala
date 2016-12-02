@@ -466,8 +466,8 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
         expr.dataType
     }
 
-  private val count: MutableLiteral = MutableLiteral(0, calcType)
-  private val sum: MutableLiteral = MutableLiteral(0, calcType)
+  private val count: MutableLiteral = MutableLiteral(0L, calcType)
+  private val sum: MutableLiteral = MutableLiteral(0L, calcType)
 
   private def addFunction(value: Any) = Add(sum, Cast(Literal(value, expr.dataType), calcType))
   private def countFunction() = Add(count, Cast(Literal(1L, calcType), calcType))
@@ -478,10 +478,10 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
       * check the other aggregation functions for a hint).
        */
   override def eval(input: Row): Any = {
-    if (count.eval(null) == 0) {
+    if (count.eval(null) == 0L) {
       null
     } else {
-        Cast(Divide(Cast(count, DecimalType.Unlimited), Cast(count, DecimalType.Unlimited)), dataType).eval(null)
+        Cast(Divide(Cast(sum, DecimalType.Unlimited), Cast(count, DecimalType.Unlimited)), dataType).eval(null)
     }
   }
 
