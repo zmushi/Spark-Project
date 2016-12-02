@@ -283,7 +283,7 @@ case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
   override def newInstance() = new CountDistinctFunction(child :: Nil, this)
 }
 
-case class Average(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
+case class Average(child: Expression) extends AggregateExpression with trees.UnaryNode[Expression] {
 
   override def nullable = true
 
@@ -298,30 +298,30 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
 
   override def toString = s"AVG($child)"
 
-  override def asPartial: SplitEvaluation = {
-    child.dataType match {
-      case DecimalType.Fixed(_, _) =>
-        // Turn the child to unlimited decimals for calculation, before going back to fixed
-        val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), "PartialSum")()
-        val partialCount = Alias(Count(child), "PartialCount")()
+  // override def asPartial: SplitEvaluation = {
+  //   child.dataType match {
+  //     case DecimalType.Fixed(_, _) =>
+  //       // Turn the child to unlimited decimals for calculation, before going back to fixed
+  //       val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), "PartialSum")()
+  //       val partialCount = Alias(Count(child), "PartialCount")()
 
-        val castedSum = Cast(Sum(partialSum.toAttribute), DecimalType.Unlimited)
-        val castedCount = Cast(Sum(partialCount.toAttribute), DecimalType.Unlimited)
-        SplitEvaluation(
-          Cast(Divide(castedSum, castedCount), dataType),
-          partialCount :: partialSum :: Nil)
+  //       val castedSum = Cast(Sum(partialSum.toAttribute), DecimalType.Unlimited)
+  //       val castedCount = Cast(Sum(partialCount.toAttribute), DecimalType.Unlimited)
+  //       SplitEvaluation(
+  //         Cast(Divide(castedSum, castedCount), dataType),
+  //         partialCount :: partialSum :: Nil)
 
-      case _ =>
-        val partialSum = Alias(Sum(child), "PartialSum")()
-        val partialCount = Alias(Count(child), "PartialCount")()
+  //     case _ =>
+  //       val partialSum = Alias(Sum(child), "PartialSum")()
+  //       val partialCount = Alias(Count(child), "PartialCount")()
 
-        val castedSum = Cast(Sum(partialSum.toAttribute), dataType)
-        val castedCount = Cast(Sum(partialCount.toAttribute), dataType)
-        SplitEvaluation(
-          Divide(castedSum, castedCount),
-          partialCount :: partialSum :: Nil)
-    }
-  }
+  //       val castedSum = Cast(Sum(partialSum.toAttribute), dataType)
+  //       val castedCount = Cast(Sum(partialCount.toAttribute), dataType)
+  //       SplitEvaluation(
+  //         Divide(castedSum, castedCount),
+  //         partialCount :: partialSum :: Nil)
+  //   }
+  // }
 
   override def newInstance() = new AverageFunction(child, this)
 }
@@ -466,13 +466,11 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
         expr.dataType
     }
 
-  private val zero: Cast = null // IMPLEMENT ME
-
-  private val count: MutableLiteral = null // IMPLEMENT ME
-  private val sum: MutableLiteral = null // IMPLEMENT ME
+  private val count: MutableLiteral = MutableLiteral(0, calcType)
+  private val sum: MutableLiteral = MutableLiteral(0, calcType)
 
   private def addFunction(value: Any) = Add(sum, Cast(Literal(value, expr.dataType), calcType))
-  private def countFunction() = Add(count, Cast(Literal(1, calcType), calcType))
+  private def countFunction() = Add(count, Cast(Literal(1L, calcType), calcType))
 
   /** This method computes the actual average as sum / count. The tricky part here is doing division while maintaining
       * the correct type. Note: both sum and count are expression! Therefore you can use the arithmetic functions
@@ -480,15 +478,10 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
       * check the other aggregation functions for a hint).
        */
   override def eval(input: Row): Any = {
-    if (count == 0L) {
+    if (count.eval(null) == 0) {
       null
     } else {
-      expr.dataType match {
-        case DecimalType.Fixed(_, _) => null // IMPLEMENT ME
-
-        case _ => null // IMPLEMENT ME
-
-      }
+        Cast(Divide(Cast(count, DecimalType.Unlimited), Cast(count, DecimalType.Unlimited)), dataType).eval(null)
     }
   }
 
@@ -496,7 +489,8 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
   override def update(input: Row): Unit = {
     val evaluatedExpr = expr.eval(input)
     if (evaluatedExpr != null) {
-      // IMPLEMENT ME
+      sum.update(addFunction(evaluatedExpr), input) 
+      count.update(countFunction, input)
     }
   }
 }

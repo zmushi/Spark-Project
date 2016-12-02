@@ -123,15 +123,15 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // Cases 1) where all aggregates can be codegened.
       case PartialAggregation(
-             namedGroupingAttributes,
-             rewrittenAggregateExpressions,
-             groupingExpressions,
-             partialComputation,
-             child)
-             if canBeCodeGened(
-                  allAggregates(partialComputation) ++
-                  allAggregates(rewrittenAggregateExpressions)) &&
-               codegenEnabled =>
+      namedGroupingAttributes,
+      rewrittenAggregateExpressions,
+      groupingExpressions,
+      partialComputation,
+      child)
+          if canBeCodeGened(
+              allAggregates(partialComputation) ++
+              allAggregates(rewrittenAggregateExpressions)) &&
+          codegenEnabled =>
           execution.GeneratedAggregate(
             partial = false,
             namedGroupingAttributes,
@@ -148,7 +148,19 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       rewrittenAggregateExpressions,
       groupingExpressions,
       partialComputation,
-      child) => Nil // IMPLEMENT ME
+      child)
+          if (!codegenEnabled) && (rewrittenAggregateExpressions.size == 1) =>
+          execution.SpillableAggregate(
+            partial = false,
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
+            execution.SpillableAggregate(
+              partial = true,
+              groupingExpressions,
+              partialComputation,
+              planLater(child))) :: Nil
+
+
 
       // Cases 3) where more than 1 aggregate must be evaluated. We use the Aggregate packed with Spark
       case PartialAggregation(
@@ -156,7 +168,17 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       rewrittenAggregateExpressions,
       groupingExpressions,
       partialComputation,
-      child) => Nil  // IMPLEMENT ME
+      child)           
+        if (!codegenEnabled) && (rewrittenAggregateExpressions.size > 1) =>
+          execution.Aggregate(
+            partial = false,
+            namedGroupingAttributes,
+            rewrittenAggregateExpressions,
+            execution.Aggregate(
+              partial = true,
+              groupingExpressions,
+              partialComputation,
+              planLater(child))) :: Nil
 
       case _ => Nil
     }

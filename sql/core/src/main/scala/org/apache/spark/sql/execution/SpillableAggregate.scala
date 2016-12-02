@@ -137,28 +137,46 @@ case class SpillableAggregate(
        * @return
        */
       private def aggregate(): Iterator[Row] = {
-        while(data.hasNext) {
-          val currRow = data.next()
-          var currFunc = currentAggregationTable(groupingProjection(currRow))
+        var currFunc:AggregateFunction = null
+        
+        if (groupingExpressions.isEmpty) {
+          currFunc = newAggregatorInstance()
 
-          if (currFunc == null) {
-            currFunc = newAggregatorInstance()
-
+          while(data.hasNext) {
+            var currRow = data.next()
             if (CS143Utils.maybeSpill(currentAggregationTable, memorySize)) {
               spillRecord(currRow)
             } else {
               currFunc.update(currRow)
-              currentAggregationTable.update(groupingProjection(currRow), currFunc)
-
             }
-          } else {
-            currFunc.update(groupingProjection(currRow))
           }
-        }
 
-        AggregateIteratorGenerator(
+          val resultProjection = new InterpretedProjection(resultExpression, Seq(aggregatorSchema))
+          Iterator(resultProjection(Row(currFunc.eval(EmptyRow))))
+
+        } else {
+          while(data.hasNext) {
+            var currRow = data.next()
+            var projectRow = groupingProjection(currRow)
+            currFunc = currentAggregationTable(projectRow)
+
+            if (currFunc == null) {
+              currFunc = newAggregatorInstance()
+
+              if (CS143Utils.maybeSpill(currentAggregationTable, memorySize)) {
+                spillRecord(currRow)
+              } else {
+                currFunc.update(currRow)
+                currentAggregationTable.update(projectRow, currFunc)
+              }
+            } else {
+              currFunc.update(currRow)   
+            }
+          }
+          AggregateIteratorGenerator(
           resultExpression,
-          Seq(aggregatorSchema) ++ namedGroups.map(_._2))(currentAggregationTable.iterator)
+          Seq(aggregatorSchema) ++ namedGroups.map(_._2))(currentAggregationTable.iterator)  
+        }
       }
 
       /**
